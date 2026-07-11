@@ -1,0 +1,432 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ── Core Users & Profiles ──
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  role         Role     @default(patient)
+  avatarUrl    String?  @map("avatar_url")
+  isActive     Boolean  @default(true) @map("is_active")
+  lastLoginAt  DateTime? @map("last_login_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  patient        Patient?
+  clinician      Clinician?
+  notifications  Notification[]
+  aiChatSessions AIChatSession[]
+
+  @@map("users")
+}
+
+enum Role {
+patient
+clinician
+admin
+}
+
+model Patient {
+  id                String   @id @default(uuid())
+  userId            String   @unique @map("user_id")
+  fullName          String   @map("full_name")
+  dob               DateTime
+  gender            String
+  phone             String?
+  address           String?
+  city              String?
+  bloodType         String?  @map("blood_type")
+  heightCm          Float?   @map("height_cm")
+  weightKg          Float?   @map("weight_kg")
+  allergies         String[]
+  chronicConditions String[] @map("chronic_conditions")
+  medications       String[]
+  familyHistory     String?  @map("family_history")
+  lifestyleNotes    String?  @map("lifestyle_notes")
+  emergencyContact  String?  @map("emergency_contact")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  user                User                @relation(fields: [userId], references: [id])
+  medicalRecords      MedicalRecord[]
+  labResults          LabResult[]
+  uploadedDocuments   UploadedDocument[]
+  aiInsights          AIInsight[]
+  appointments        Appointment[]
+  dataSharingConsents DataSharingConsent[]
+  clinicianNotes      ClinicianNote[]
+  riskAssessments     RiskAssessment[]
+  symptomLogs         SymptomLog[]
+  medicationReminders MedicationReminder[]
+  vitalsLogs          VitalsLog[]
+  healthReports       HealthReport[]
+
+  @@index([userId])
+  @@map("patients")
+}
+
+model Clinician {
+  id           String   @id @default(uuid())
+  userId       String   @unique @map("user_id")
+  fullName     String   @map("full_name")
+  specialty    String
+  facilityName String   @map("facility_name")
+  licenseNo    String?  @map("license_no")
+  bio          String?
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  user          User          @relation(fields: [userId], references: [id])
+  appointments  Appointment[]
+  notes         ClinicianNote[]
+  healthReports HealthReport[]
+
+  @@index([userId])
+  @@map("clinicians")
+}
+
+model Facility {
+  id      String       @id @default(uuid())
+  name    String
+  type    FacilityType
+  address String?
+  phone   String?
+  email   String?
+  logoUrl String?      @map("logo_url")
+
+  medicalRecords     MedicalRecord[]
+  labResults         LabResult[]
+  dataSharingConsents DataSharingConsent[]
+
+  @@map("facilities")
+}
+
+enum FacilityType {
+hospital
+lab
+clinic
+pharmacy
+imaging_center
+}
+
+// ── Medical Records & Labs ──
+
+model MedicalRecord {
+  id           String       @id @default(uuid())
+  patientId    String       @map("patient_id")
+  facilityId   String       @map("facility_id")
+  recordType   RecordType   @map("record_type")
+  title        String
+  recordDate   DateTime     @map("record_date")
+  content      String
+  sourceFormat SourceFormat @map("source_format")
+  clinician    String?
+  tags         String[]
+  createdAt    DateTime     @default(now()) @map("created_at")
+
+  patient  Patient  @relation(fields: [patientId], references: [id])
+  facility Facility @relation(fields: [facilityId], references: [id])
+
+  @@index([patientId])
+  @@index([recordDate])
+  @@map("medical_records")
+}
+
+enum RecordType {
+visit
+prescription
+imaging
+note
+surgery
+vaccination
+lab_report
+referral
+discharge_summary
+}
+
+enum SourceFormat {
+structured
+unstructured
+imaging
+pdf
+}
+
+model LabResult {
+  id             String   @id @default(uuid())
+  patientId      String   @map("patient_id")
+  facilityId     String   @map("facility_id")
+  testName       String   @map("test_name")
+  value          Float
+  unit           String
+  referenceRange String   @map("reference_range")
+  testDate       DateTime @map("test_date")
+  category       String   @default("general")
+  isAbnormal     Boolean  @default(false) @map("is_abnormal")
+  aiAnalysis     String?  @map("ai_analysis")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  patient  Patient  @relation(fields: [patientId], references: [id])
+  facility Facility @relation(fields: [facilityId], references: [id])
+
+  @@index([patientId])
+  @@index([testDate])
+  @@map("lab_results")
+}
+
+// ── Documents & Cloud Storage ──
+
+model UploadedDocument {
+  id             String    @id @default(uuid())
+  patientId      String    @map("patient_id")
+  fileName       String    @map("file_name")
+  fileUrl        String    @map("file_url")
+  cloudinaryId   String?   @map("cloudinary_id")
+  uploadDate     DateTime  @default(now()) @map("upload_date")
+  ocrStatus      OcrStatus @default(pending) @map("ocr_status")
+  extractedText  String?   @map("extracted_text")
+  documentType   String?   @map("document_type")
+  fileSize       Int?
+  mimeType       String?   @map("mime_type")
+  ocrConfidence  Float?    @map("ocr_confidence")
+  tags           String[]
+
+  patient Patient @relation(fields: [patientId], references: [id])
+
+  @@index([patientId])
+  @@map("uploaded_documents")
+}
+
+enum OcrStatus {
+pending
+processing
+complete
+failed
+}
+
+// ── AI / ML Features ──
+
+model AIInsight {
+  id             String         @id @default(uuid())
+  patientId      String         @map("patient_id")
+  insightText    String         @map("insight_text")
+  metric         String?
+  trendDirection TrendDirection @map("trend_direction")
+  severity       String         @default("info")
+  category       String         @default("general")
+  confidence     Float?         @default(0.85)
+  source         String?        @default("rule-engine")
+  generatedAt    DateTime       @default(now()) @map("generated_at")
+
+  patient Patient @relation(fields: [patientId], references: [id])
+
+  @@index([patientId])
+  @@map("ai_insights")
+}
+
+enum TrendDirection {
+up
+down
+stable
+fluctuating
+}
+
+model AIChatSession {
+  id        String        @id @default(uuid())
+  userId    String        @map("user_id")
+  title     String        @default("New Chat")
+  createdAt DateTime      @default(now()) @map("created_at")
+  updatedAt DateTime      @updatedAt @map("updated_at")
+
+  user     User             @relation(fields: [userId], references: [id])
+  messages AIChatMessage[]
+
+  @@index([userId])
+  @@map("ai_chat_sessions")
+}
+
+model AIChatMessage {
+  id        String   @id @default(uuid())
+  sessionId String   @map("session_id")
+  role      String   // user, assistant
+  content   String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  session AIChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@map("ai_chat_messages")
+}
+
+model RiskAssessment {
+  id             String   @id @default(uuid())
+  patientId      String   @map("patient_id")
+  condition      String
+  riskScore      Float    @map("risk_score")
+  riskLevel      String   @map("risk_level") // low, moderate, high, critical
+  factors        String[]
+  recommendation String?
+  modelUsed      String?  @map("model_used")
+  assessedAt     DateTime @default(now()) @map("assessed_at")
+
+  patient Patient @relation(fields: [patientId], references: [id])
+
+  @@index([patientId])
+  @@map("risk_assessments")
+}
+
+// ── Symptoms & Vitals ──
+
+model SymptomLog {
+  id          String   @id @default(uuid())
+  patientId   String   @map("patient_id")
+  symptoms    String[]
+  severity    Int      @default(3) // 1-10
+  duration    String?
+  notes       String?
+  aiTriage    String?  @map("ai_triage")
+  loggedAt    DateTime @default(now()) @map("logged_at")
+
+  patient Patient @relation(fields: [patientId], references: [id])
+
+  @@index([patientId])
+  @@map("symptom_logs")
+}
+
+model VitalsLog {
+  id        String   @id @default(uuid())
+  patientId String   @map("patient_id")
+  systolic  Int?
+  diastolic Int?
+  heartRate Int?     @map("heart_rate")
+  tempC     Float?   @map("temp_c")
+  spo2      Float?
+  glucose   Float?
+  weightKg  Float?   @map("weight_kg")
+  recordedAt DateTime @default(now()) @map("recorded_at")
+
+  patient Patient @relation(fields: [patientId], references: [id])
+
+  @@index([patientId])
+  @@map("vitals_logs")
+}
+
+model MedicationReminder {
+  id          String    @id @default(uuid())
+  patientId   String    @map("patient_id")
+  medication  String
+  dosage      String
+  frequency   String    // daily, twice_daily, weekly, custom
+  timeOfDay   String[]  @map("time_of_day")
+  startDate   DateTime  @map("start_date")
+  endDate     DateTime? @map("end_date")
+  isActive    Boolean   @default(true) @map("is_active")
+  notes       String?
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  patient Patient @relation(fields: [patientId], references: [id])
+
+  @@index([patientId])
+  @@map("medication_reminders")
+}
+
+// ── Appointments & Consents ──
+
+model Appointment {
+  id          String            @id @default(uuid())
+  patientId   String            @map("patient_id")
+  clinicianId String            @map("clinician_id")
+  scheduledAt DateTime          @map("scheduled_at")
+  durationMin Int               @default(30) @map("duration_min")
+  status      AppointmentStatus @default(requested)
+  reason      String?
+  notes       String?
+  isVirtual   Boolean           @default(false) @map("is_virtual")
+  meetLink    String?           @map("meet_link")
+  createdAt   DateTime          @default(now()) @map("created_at")
+
+  patient   Patient   @relation(fields: [patientId], references: [id])
+  clinician Clinician @relation(fields: [clinicianId], references: [id])
+
+  @@index([patientId])
+  @@index([clinicianId])
+  @@map("appointments")
+}
+
+enum AppointmentStatus {
+requested
+confirmed
+completed
+cancelled
+no_show
+}
+
+model DataSharingConsent {
+  id         String   @id @default(uuid())
+  patientId  String   @map("patient_id")
+  facilityId String   @map("facility_id")
+  granted    Boolean  @default(false)
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  patient  Patient  @relation(fields: [patientId], references: [id])
+  facility Facility @relation(fields: [facilityId], references: [id])
+
+  @@unique([patientId, facilityId])
+  @@map("data_sharing_consents")
+}
+
+model ClinicianNote {
+  id          String   @id @default(uuid())
+  patientId   String   @map("patient_id")
+  clinicianId String   @map("clinician_id")
+  noteText    String   @map("note_text")
+  isPrivate   Boolean  @default(true) @map("is_private")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  patient   Patient   @relation(fields: [patientId], references: [id])
+  clinician Clinician @relation(fields: [clinicianId], references: [id])
+
+  @@index([patientId])
+  @@map("clinician_notes")
+}
+
+// ── Notifications & Reports ──
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  title     String
+  body      String
+  type      String   @default("info") // info, warning, alert, success
+  isRead    Boolean  @default(false) @map("is_read")
+  link      String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@map("notifications")
+}
+
+model HealthReport {
+  id              String   @id @default(uuid())
+  patientId       String   @map("patient_id")
+  clinicianId     String?  @map("clinician_id")
+  title           String
+  summary         String
+  detailedContent String   @map("detailed_content")
+  reportType      String   @map("report_type") // comprehensive, lab_summary, risk_profile, medication_review
+  generatedBy     String   @default("ai") @map("generated_by")
+  generatedAt     DateTime @default(now()) @map("generated_at")
+
+  patient   Patient    @relation(fields: [patientId], references: [id])
+  clinician Clinician? @relation(fields: [clinicianId], references: [id])
+
+  @@index([patientId])
+  @@map("health_reports")
+}
