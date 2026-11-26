@@ -23,6 +23,21 @@ export class CliniciansController {
     return this.cliniciansService.getPatients(id, search, sort, filter);
   }
 
+  @Get('clinicians/:id/analytics')
+  getAnalytics(@Param('id') id: string) {
+    return this.cliniciansService.getAnalytics(id);
+  }
+
+  @Get('clinicians/:id/analytics/monthly')
+  getAnalyticsMonthly(@Param('id') id: string) {
+    return this.cliniciansService.getAnalyticsMonthly(id);
+  }
+
+  @Get('clinicians/:id/analytics/kpis')
+  getAnalyticsKpis(@Param('id') id: string) {
+    return this.cliniciansService.getAnalyticsKpis(id);
+  }
+
   @Post('patients/:patientId/notes')
   addNote(
     @Param('patientId') patientId: string,

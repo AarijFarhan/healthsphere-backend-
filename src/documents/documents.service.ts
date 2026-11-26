@@ -1,8 +1,9 @@
-import { Injectable, NotFoundException, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CloudinaryService } from '../cloudinary/cloudinary.service';
 import { GeminiService } from '../gemini/gemini.service';
 import * as fs from 'fs';
+import * as path from 'path';
 
 @Injectable()
 export class DocumentsService {
@@ -14,30 +15,30 @@ export class DocumentsService {
     private gemini: GeminiService,
   ) {}
 
-  async uploadDocument(
-    patientId: string,
-    file: Express.Multer.File,
-  ) {
-    const patient = await this.prisma.patient.findUnique({ where: { id: patientId } });
+  async uploadDocument(patientId: string, file: Express.Multer.File) {
+    if (!file?.buffer?.length) throw new BadRequestException('File is required');
+
+    const resolvedPatientId = await this.resolvePatientId(patientId);
+    const patient = await this.prisma.patient.findUnique({ where: { id: resolvedPatientId } });
     if (!patient) throw new NotFoundException('Patient not found');
 
-    // Upload to Cloudinary
     let cloudinaryResult: any = null;
-    let fileUrl = `/uploads/${file.filename}`;
+    let fileUrl: string;
 
     try {
-      // Try Cloudinary upload; fall back to local storage
       cloudinaryResult = await this.cloudinary.uploadFile(file);
       fileUrl = cloudinaryResult.secure_url;
-    } catch (err) {
-      this.logger.warn('Cloudinary upload failed, using local storage');
-      const uploadDir = process.env.UPLOAD_DIR || './uploads';
-      if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+    } catch {
+      const uploadDir = path.resolve(process.env.UPLOAD_DIR || 'uploads');
+      fs.mkdirSync(uploadDir, { recursive: true });
+      const storedName = `${Date.now()}-${Math.random().toString(36).slice(2)}-${path.basename(file.originalname)}`;
+      fs.writeFileSync(path.join(uploadDir, storedName), file.buffer);
+      fileUrl = `/uploads/${storedName}`;
     }
 
     const doc = await this.prisma.uploadedDocument.create({
       data: {
-        patientId,
+        patientId: resolvedPatientId,
         fileName: file.originalname,
         fileUrl,
         cloudinaryId: cloudinaryResult?.public_id || null,
@@ -48,56 +49,72 @@ export class DocumentsService {
       },
     });
 
-    // Async OCR + AI processing
-    this.processDocumentWithAI(doc.id, file, patient).catch(this.logger.error);
+    this.processDocument(doc.id, file.buffer, file.mimetype, file.originalname).catch((err) => {
+      this.logger.error(`OCR failed for document ${doc.id}:`, err);
+    });
 
     return doc;
   }
 
-  private async processDocumentWithAI(
+  async runOcr(id: string) {
+    const doc = await this.getDocument(id);
+    const buffer = await this.loadFileBuffer(doc);
+    return this.processDocument(doc.id, buffer, doc.mimeType || '', doc.fileName);
+  }
+
+  private async loadFileBuffer(doc: any): Promise<Buffer> {
+    if (doc.fileUrl?.startsWith('/uploads/')) {
+      const filePath = path.join(
+        path.resolve(process.env.UPLOAD_DIR || 'uploads'),
+        path.basename(doc.fileUrl),
+      );
+      if (fs.existsSync(filePath)) return fs.readFileSync(filePath);
+    }
+
+    if (doc.fileUrl) {
+      const response = await fetch(doc.fileUrl);
+      if (!response.ok) throw new Error(`Unable to download document (${response.status})`);
+      return Buffer.from(await response.arrayBuffer());
+    }
+
+    throw new Error('No file available for OCR');
+  }
+
+  private async processDocument(
     docId: string,
-    file: Express.Multer.File,
-    patient: any,
+    buffer: Buffer,
+    mimeType: string,
+    fileName: string,
   ) {
-    await new Promise((r) => setTimeout(r, 1500));
-
     try {
-      let extractedText = '';
+      const doc = await this.getDocument(docId);
+      const { text, confidence } = await this.extractText(buffer, mimeType, fileName);
 
-      // Try Tesseract.js OCR
-      try {
-        const Tesseract = require('tesseract.js');
-        const result = await Tesseract.recognize(file.path || file.buffer, 'eng');
-        extractedText = result.data.text;
-      } catch {
-        extractedText = this.generateFallbackText(file.originalname, patient);
+      let aiSummary = '';
+      if (this.gemini.isEnabled() && text) {
+        try {
+          aiSummary = await this.gemini.generateResponse(
+            `Summarize this medical document and extract key medical findings: ${text.slice(0, 2000)}`,
+          );
+        } catch (err) {
+          this.logger.warn('AI summary failed, OCR result kept:', err);
+        }
       }
 
-      // AI analysis of extracted text
-      let aiSummary = '';
-      try {
-        if (extractedText && extractedText.length > 50) {
-          aiSummary = await this.gemini.generateResponse(
-            `Summarize this medical document and extract key medical findings: ${extractedText.slice(0, 2000)}`,
-          );
-        }
-      } catch {}
-
-      await this.prisma.uploadedDocument.update({
+      const updated = await this.prisma.uploadedDocument.update({
         where: { id: docId },
         data: {
           ocrStatus: 'complete',
-          extractedText: extractedText || 'No text could be extracted.',
-          ocrConfidence: extractedText ? 0.85 : 0,
-          tags: this.extractTags(extractedText),
+          extractedText: text || null,
+          ocrConfidence: confidence,
+          tags: this.extractTags(text),
         },
       });
 
-      // If AI analysis produced something, save as an insight
       if (aiSummary) {
         await this.prisma.aIInsight.create({
           data: {
-            patientId: patient.id,
+            patientId: doc.patientId,
             insightText: aiSummary.slice(0, 500),
             trendDirection: 'stable',
             severity: 'info',
@@ -107,35 +124,60 @@ export class DocumentsService {
           },
         });
       }
+
+      return updated;
     } catch (err) {
-      this.logger.error('OCR processing failed:', err);
-      await this.prisma.uploadedDocument.update({
-        where: { id: docId },
-        data: { ocrStatus: 'failed' },
-      });
+      await this.prisma.uploadedDocument
+        .update({ where: { id: docId }, data: { ocrStatus: 'failed' } })
+        .catch(() => undefined);
+      throw err;
     }
+  }
+
+  private async extractText(
+    buffer: Buffer,
+    mimeType: string,
+    fileName: string,
+  ): Promise<{ text: string; confidence: number }> {
+    if (mimeType.includes('pdf') || fileName.toLowerCase().endsWith('.pdf')) {
+      const pdfjs = require('pdfjs-dist/legacy/build/pdf.js');
+      const pdf = await pdfjs.getDocument({ data: new Uint8Array(buffer) }).promise;
+      let text = '';
+      for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+        const page = await pdf.getPage(pageNumber);
+        const content = await page.getTextContent();
+        text += `${content.items.map((item: any) => item.str || '').join(' ')}\n`;
+      }
+      await pdf.destroy();
+      text = text.trim();
+      return { text, confidence: text ? 0.99 : 0 };
+    }
+
+    const Tesseract = require('tesseract.js');
+    const result = await Tesseract.recognize(buffer, 'eng');
+    const text = String(result?.data?.text || '').trim();
+    const confidence = text ? Number(result?.data?.confidence || 80) / 100 : 0;
+    return { text, confidence };
+  }
+
+  private async resolvePatientId(id: string): Promise<string> {
+    if (process.env.DEMO_MODE !== 'true' || id !== 'patient-1-id') return id;
+    const user = await this.prisma.user.findUnique({ where: { email: 'patient@demo.com' } });
+    if (!user) return id;
+    const patient = await this.prisma.patient.findUnique({ where: { userId: user.id } });
+    return patient?.id || id;
   }
 
   private detectDocType(mimeType: string, filename: string): string {
     if (mimeType.includes('pdf')) return 'PDF Document';
     if (mimeType.includes('image')) {
-      if (filename.toLowerCase().includes('xray') || filename.toLowerCase().includes('x-ray')) return 'X-Ray';
-      if (filename.toLowerCase().includes('mri')) return 'MRI Scan';
-      if (filename.toLowerCase().includes('ct')) return 'CT Scan';
+      const name = filename.toLowerCase();
+      if (name.includes('xray') || name.includes('x-ray')) return 'X-Ray';
+      if (name.includes('mri')) return 'MRI Scan';
+      if (name.includes('ct')) return 'CT Scan';
       return 'Medical Image';
     }
     return 'Document';
-  }
-
-  private generateFallbackText(filename: string, patient: any): string {
-    const name = filename.toLowerCase();
-    if (name.includes('prescription')) {
-      return `PRESCRIPTION\nDate: ${new Date().toLocaleDateString()}\nPatient: ${patient.fullName}\nMedications as prescribed by physician.\nRefills: As indicated.\n\nDigitized by HealthSphere OCR.`;
-    }
-    if (name.includes('lab') || name.includes('report')) {
-      return `LABORATORY REPORT\nPatient: ${patient.fullName}\nTest: Complete Blood Panel\nAll markers within or near reference ranges.\n\nDigitized by HealthSphere OCR.`;
-    }
-    return `MEDICAL DOCUMENT — ${filename}\nPatient: ${patient.fullName}\nSuccessfully digitized by HealthSphere OCR.\nKey findings have been integrated into the unified health record.`;
   }
 
   private extractTags(text: string): string[] {
@@ -162,8 +204,9 @@ export class DocumentsService {
   }
 
   async getPatientDocuments(patientId: string) {
+    const resolvedPatientId = await this.resolvePatientId(patientId);
     return this.prisma.uploadedDocument.findMany({
-      where: { patientId },
+      where: { patientId: resolvedPatientId },
       orderBy: { uploadDate: 'desc' },
     });
   }
@@ -172,6 +215,13 @@ export class DocumentsService {
     const doc = await this.getDocument(id);
     if (doc.cloudinaryId) {
       try { await this.cloudinary.deleteFile(doc.cloudinaryId); } catch {}
+    }
+    if (doc.fileUrl?.startsWith('/uploads/')) {
+      const filePath = path.join(
+        path.resolve(process.env.UPLOAD_DIR || 'uploads'),
+        path.basename(doc.fileUrl),
+      );
+      try { fs.unlinkSync(filePath); } catch {}
     }
     return this.prisma.uploadedDocument.delete({ where: { id } });
   }

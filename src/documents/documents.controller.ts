@@ -38,6 +38,13 @@ export class DocumentsController {
     return this.documentsService.getDocument(id);
   }
 
+  @Post('documents/:id/ocr')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  runOcr(@Param('id') id: string) {
+    return this.documentsService.runOcr(id);
+  }
+
   @Get('patients/:patientId/documents')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()

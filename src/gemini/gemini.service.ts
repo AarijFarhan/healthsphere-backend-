@@ -18,6 +18,10 @@ export class GeminiService {
     }
   }
 
+  isEnabled(): boolean {
+    return this.initialized;
+  }
+
   async generateResponse(prompt: string, context?: string): Promise<string> {
     // If no API key configured, use a simulated medical AI
     if (!this.initialized) {

@@ -1,16 +1,21 @@
 import { NestFactory } from '@nestjs/core';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import * as helmet from 'helmet';
 import * as compression from 'compression';
+import * as path from 'path';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
   app.use(helmet.default());
   app.use(compression());
+  app.useStaticAssets(path.resolve(process.env.UPLOAD_DIR || 'uploads'), {
+    prefix: '/uploads/',
+  });
 
   app.enableCors({
     origin: ['http://localhost:5173', 'http://localhost:3000'],

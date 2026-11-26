@@ -40,6 +40,22 @@ export class AuthService {
   }
 
   async getMe(userId: string) {
+    if (process.env.DEMO_MODE === 'true' && userId === 'demo-user-id') {
+      const patient = await this.prisma.patient.findFirst({
+        where: { user: { email: 'patient@demo.com' } },
+      });
+      const clinician = await this.prisma.clinician.findFirst({
+        where: { user: { email: 'clinician@demo.com' } },
+      });
+      return {
+        id: 'demo-user-id',
+        email: 'demo@healthsphere.local',
+        role: 'demo',
+        patient,
+        clinician,
+      };
+    }
+
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       include: { patient: true, clinician: true },
