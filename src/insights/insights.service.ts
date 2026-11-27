@@ -1,18 +1,26 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { PaginationDto } from '../common/pagination/pagination.dto';
+import { paginated } from '../common/pagination/pagination';
 
 @Injectable()
 export class InsightsService {
   constructor(private prisma: PrismaService) {}
 
-  async getInsights(patientId: string) {
+  async getInsights(patientId: string, pagination?: PaginationDto) {
     const patient = await this.prisma.patient.findUnique({ where: { id: patientId } });
     if (!patient) throw new NotFoundException('Patient not found');
 
-    return this.prisma.aIInsight.findMany({
+    const page = pagination?.page || 1;
+    const limit = pagination?.limit || 20;
+    const where = { patientId };
+    const [items, total] = await Promise.all([this.prisma.aIInsight.findMany({
       where: { patientId },
+      skip: (page - 1) * limit,
+      take: limit,
       orderBy: { generatedAt: 'desc' },
-    });
+    }), this.prisma.aIInsight.count({ where })]);
+    return paginated(items, total, page, limit);
   }
 
   async generateInsights(patientId: string) {

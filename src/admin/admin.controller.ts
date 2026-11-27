@@ -1,7 +1,8 @@
-import { Controller, Get, Patch, Param, Body, UseGuards, Req } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
+import { Controller, Get, Patch, Param, Body, UseGuards, Req, Query } from '@nestjs/common';
+import { ApiTags, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { AdminService } from './admin.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { PaginationDto } from '../common/pagination/pagination.dto';
 
 @ApiTags('Admin & Consents')
 @Controller()
@@ -18,8 +19,10 @@ export class AdminController {
   @Get('patients/:patientId/consents')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  getConsents(@Param('patientId') patientId: string) {
-    return this.adminService.getConsents(patientId);
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  getConsents(@Param('patientId') patientId: string, @Query() pagination: PaginationDto) {
+    return this.adminService.getConsents(patientId, pagination);
   }
 
   @Patch('patients/:patientId/consents')

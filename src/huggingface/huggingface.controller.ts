@@ -1,7 +1,9 @@
-import { Controller, Post, Get, Body, Param, UseGuards } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
+import { Controller, Post, Get, Body, Param, UseGuards, Query } from '@nestjs/common';
+import { ApiTags, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { HuggingFaceService } from './huggingface.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { PaginationDto } from '../common/pagination/pagination.dto';
+import { paginated } from '../common/pagination/pagination';
 import { PrismaService } from '../prisma/prisma.service';
 
 @ApiTags('AI Models')
@@ -61,10 +63,18 @@ export class HuggingFaceController {
   @Get('risk-assessments/:patientId')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  async getRiskAssessments(@Param('patientId') patientId: string) {
-    return this.prisma.riskAssessment.findMany({
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  async getRiskAssessments(@Param('patientId') patientId: string, @Query() pagination: PaginationDto) {
+    const page = pagination?.page || 1;
+    const limit = pagination?.limit || 20;
+    const where = { patientId };
+    const [items, total] = await Promise.all([this.prisma.riskAssessment.findMany({
       where: { patientId },
+      skip: (page - 1) * limit,
+      take: limit,
       orderBy: { assessedAt: 'desc' },
-    });
+    }), this.prisma.riskAssessment.count({ where })]);
+    return paginated(items, total, page, limit);
   }
 }

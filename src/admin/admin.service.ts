@@ -1,5 +1,7 @@
 import { ForbiddenException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { PaginationDto } from '../common/pagination/pagination.dto';
+import { paginated } from '../common/pagination/pagination';
 
 @Injectable()
 export class AdminService {
@@ -68,11 +70,17 @@ export class AdminService {
     };
   }
 
-  async getConsents(patientId: string) {
-    return this.prisma.dataSharingConsent.findMany({
+  async getConsents(patientId: string, pagination?: PaginationDto) {
+    const page = pagination?.page || 1;
+    const limit = pagination?.limit || 20;
+    const where = { patientId };
+    const [items, total] = await Promise.all([this.prisma.dataSharingConsent.findMany({
       where: { patientId },
+      skip: (page - 1) * limit,
+      take: limit,
       include: { facility: { select: { name: true, type: true } } },
-    });
+    }), this.prisma.dataSharingConsent.count({ where })]);
+    return paginated(items, total, page, limit);
   }
 
   async updateConsent(patientId: string, facilityId: string, granted: boolean) {

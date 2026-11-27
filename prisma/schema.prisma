@@ -95,6 +95,7 @@ model Facility {
   id      String       @id @default(uuid())
   name    String
   type    FacilityType
+  isActive Boolean      @default(true) @map("is_active")
   address String?
   phone   String?
   email   String?

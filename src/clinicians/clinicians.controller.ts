@@ -2,6 +2,7 @@ import { Controller, Get, Post, Param, Body, Query, UseGuards, Req } from '@nest
 import { ApiTags, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { CliniciansService } from './clinicians.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { PaginationDto } from '../common/pagination/pagination.dto';
 
 @ApiTags('Clinicians')
 @Controller()
@@ -19,8 +20,9 @@ export class CliniciansController {
     @Query('search') search?: string,
     @Query('sort') sort?: string,
     @Query('filter') filter?: string,
+    @Query() pagination?: PaginationDto,
   ) {
-    return this.cliniciansService.getPatients(id, search, sort, filter);
+    return this.cliniciansService.getPatients(id, search, sort, filter, pagination);
   }
 
   @Get('clinicians/:id/analytics')
@@ -48,7 +50,7 @@ export class CliniciansController {
   }
 
   @Get('patients/:patientId/notes')
-  getNotes(@Param('patientId') patientId: string) {
-    return this.cliniciansService.getNotes(patientId);
+  getNotes(@Param('patientId') patientId: string, @Query() pagination: PaginationDto) {
+    return this.cliniciansService.getNotes(patientId, pagination);
   }
 }

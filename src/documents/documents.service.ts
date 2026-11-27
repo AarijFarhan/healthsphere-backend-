@@ -1,5 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { PaginationDto } from '../common/pagination/pagination.dto';
+import { paginated } from '../common/pagination/pagination';
 import { CloudinaryService } from '../cloudinary/cloudinary.service';
 import { GeminiService } from '../gemini/gemini.service';
 import * as fs from 'fs';
@@ -203,12 +205,18 @@ export class DocumentsService {
     return doc;
   }
 
-  async getPatientDocuments(patientId: string) {
+  async getPatientDocuments(patientId: string, pagination?: PaginationDto) {
     const resolvedPatientId = await this.resolvePatientId(patientId);
-    return this.prisma.uploadedDocument.findMany({
+    const page = pagination?.page || 1;
+    const limit = pagination?.limit || 20;
+    const where = { patientId: resolvedPatientId };
+    const [items, total] = await Promise.all([this.prisma.uploadedDocument.findMany({
       where: { patientId: resolvedPatientId },
+      skip: (page - 1) * limit,
+      take: limit,
       orderBy: { uploadDate: 'desc' },
-    });
+    }), this.prisma.uploadedDocument.count({ where })]);
+    return paginated(items, total, page, limit);
   }
 
   async deleteDocument(id: string) {

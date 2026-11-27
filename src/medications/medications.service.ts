@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { HuggingFaceService } from '../huggingface/huggingface.service';
+import { PaginationDto } from '../common/pagination/pagination.dto';
+import { paginated } from '../common/pagination/pagination';
 
 @Injectable()
 export class MedicationsService {
@@ -9,11 +11,17 @@ export class MedicationsService {
     private hf: HuggingFaceService,
   ) {}
 
-  async getReminders(patientId: string) {
-    return this.prisma.medicationReminder.findMany({
+  async getReminders(patientId: string, pagination?: PaginationDto) {
+    const page = pagination?.page || 1;
+    const limit = pagination?.limit || 20;
+    const where = { patientId };
+    const [items, total] = await Promise.all([this.prisma.medicationReminder.findMany({
       where: { patientId },
+      skip: (page - 1) * limit,
+      take: limit,
       orderBy: { createdAt: 'desc' },
-    });
+    }), this.prisma.medicationReminder.count({ where })]);
+    return paginated(items, total, page, limit);
   }
 
   async createReminder(patientId: string, data: {
@@ -58,7 +66,7 @@ export class MedicationsService {
     const reminders = await this.getReminders(patientId);
     return {
       listed: patient?.medications || [],
-      reminders: reminders.filter((r) => r.isActive),
+      reminders: reminders.data.filter((r) => r.isActive),
     };
   }
 }

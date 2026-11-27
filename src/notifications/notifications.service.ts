@@ -1,16 +1,23 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { PaginationDto } from '../common/pagination/pagination.dto';
+import { paginated } from '../common/pagination/pagination';
 
 @Injectable()
 export class NotificationsService {
   constructor(private prisma: PrismaService) {}
 
-  async getNotifications(userId: string) {
-    return this.prisma.notification.findMany({
+  async getNotifications(userId: string, pagination?: PaginationDto) {
+    const page = pagination?.page || 1;
+    const limit = pagination?.limit || 20;
+    const where = { userId };
+    const [items, total] = await Promise.all([this.prisma.notification.findMany({
       where: { userId },
+      skip: (page - 1) * limit,
+      take: limit,
       orderBy: { createdAt: 'desc' },
-      take: 50,
-    });
+    }), this.prisma.notification.count({ where })]);
+    return paginated(items, total, page, limit);
   }
 
   async createNotification(userId: string, title: string, body: string, type = 'info', link?: string) {

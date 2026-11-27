@@ -1,8 +1,9 @@
-import { Controller, Get, Post, Patch, Param, Body, UseGuards, Req } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
+import { Controller, Get, Post, Patch, Param, Body, UseGuards, Req, Query } from '@nestjs/common';
+import { ApiTags, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { AppointmentsService } from './appointments.service';
 import { CreateAppointmentDto, UpdateAppointmentDto } from './dto/appointment.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { PaginationDto } from '../common/pagination/pagination.dto';
 
 @ApiTags('Appointments')
 @Controller('appointments')
@@ -12,8 +13,10 @@ export class AppointmentsController {
   constructor(private appointmentsService: AppointmentsService) {}
 
   @Get()
-  getAppointments(@Req() req: any) {
-    return this.appointmentsService.getAppointments(req.user.sub, req.user.role);
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  getAppointments(@Req() req: any, @Query() query: PaginationDto) {
+    return this.appointmentsService.getAppointments(req.user.sub, req.user.role, query);
   }
 
   @Post()

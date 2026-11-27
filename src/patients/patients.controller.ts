@@ -1,8 +1,9 @@
-import { Controller, Get, Patch, Param, Body, UseGuards, Req } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
+import { Controller, Get, Patch, Param, Body, UseGuards, Req, Query } from '@nestjs/common';
+import { ApiTags, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { PatientsService } from './patients.service';
 import { UpdatePatientDto } from './dto/patient.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { PaginationDto } from '../common/pagination/pagination.dto';
 
 @ApiTags('Patients')
 @Controller('patients')
@@ -26,7 +27,9 @@ export class PatientsController {
   @Get(':id/timeline')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  getTimeline(@Param('id') id: string) {
-    return this.patientsService.getTimeline(id);
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  getTimeline(@Param('id') id: string, @Query() pagination: PaginationDto) {
+    return this.patientsService.getTimeline(id, pagination);
   }
 }

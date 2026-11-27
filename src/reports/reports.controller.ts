@@ -2,6 +2,7 @@ import { Controller, Get, Post, Param, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { ReportsService } from './reports.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { PaginationDto } from '../common/pagination/pagination.dto';
 
 @ApiTags('Reports')
 @Controller()
@@ -19,8 +20,8 @@ export class ReportsController {
   }
 
   @Get('patients/:patientId/reports')
-  getReports(@Param('patientId') patientId: string) {
-    return this.reportsService.getReports(patientId);
+  getReports(@Param('patientId') patientId: string, @Query() pagination: PaginationDto) {
+    return this.reportsService.getReports(patientId, pagination);
   }
 
   @Get('reports/:id')

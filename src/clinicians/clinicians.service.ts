@@ -1,11 +1,13 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { PaginationDto } from '../common/pagination/pagination.dto';
+import { paginated } from '../common/pagination/pagination';
 
 @Injectable()
 export class CliniciansService {
   constructor(private prisma: PrismaService) {}
 
-  async getPatients(clinicianId: string, search?: string, sort?: string, filter?: string) {
+  async getPatients(clinicianId: string, search?: string, sort?: string, filter?: string, pagination?: PaginationDto) {
     const clinician = await this.prisma.clinician.findUnique({ where: { id: clinicianId } });
     if (!clinician) throw new NotFoundException('Clinician not found');
 
@@ -21,15 +23,19 @@ export class CliniciansService {
     if (sort === 'name') orderBy = { fullName: 'asc' };
     if (sort === 'recent') orderBy = { createdAt: 'desc' };
 
-    const patients = await this.prisma.patient.findMany({
+    const page = pagination?.page || 1;
+    const limit = pagination?.limit || 20;
+    const [patients, total] = await Promise.all([this.prisma.patient.findMany({
       where,
       orderBy,
+      skip: (page - 1) * limit,
+      take: limit,
       include: {
         _count: { select: { medicalRecords: true, appointments: true } },
       },
-    });
+    }), this.prisma.patient.count({ where })]);
 
-    return patients;
+    return paginated(patients, total, page, limit);
   }
 
   async getClinicianByUserId(userId: string) {
@@ -55,12 +61,18 @@ export class CliniciansService {
     });
   }
 
-  async getNotes(patientId: string) {
-    return this.prisma.clinicianNote.findMany({
+  async getNotes(patientId: string, pagination?: PaginationDto) {
+    const page = pagination?.page || 1;
+    const limit = pagination?.limit || 20;
+    const where = { patientId };
+    const [items, total] = await Promise.all([this.prisma.clinicianNote.findMany({
       where: { patientId },
+      skip: (page - 1) * limit,
+      take: limit,
       include: { clinician: { select: { fullName: true, specialty: true } } },
       orderBy: { createdAt: 'desc' },
-    });
+    }), this.prisma.clinicianNote.count({ where })]);
+    return paginated(items, total, page, limit);
   }
 
   private async resolveClinicianId(id: string): Promise<string> {

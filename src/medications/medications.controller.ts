@@ -1,7 +1,8 @@
-import { Controller, Get, Post, Patch, Delete, Param, Body, UseGuards } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
+import { Controller, Get, Post, Patch, Delete, Param, Body, UseGuards, Query } from '@nestjs/common';
+import { ApiTags, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { MedicationsService } from './medications.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { PaginationDto } from '../common/pagination/pagination.dto';
 
 @ApiTags('Medications')
 @Controller()
@@ -16,8 +17,10 @@ export class MedicationsController {
   }
 
   @Get('patients/:patientId/medication-reminders')
-  getReminders(@Param('patientId') patientId: string) {
-    return this.medsService.getReminders(patientId);
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  getReminders(@Param('patientId') patientId: string, @Query() pagination: PaginationDto) {
+    return this.medsService.getReminders(patientId, pagination);
   }
 
   @Post('patients/:patientId/medication-reminders')

@@ -1,6 +1,8 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdatePatientDto } from './dto/patient.dto';
+import { PaginationDto } from '../common/pagination/pagination.dto';
+import { paginated } from '../common/pagination/pagination';
 
 @Injectable()
 export class PatientsService {
@@ -29,14 +31,19 @@ export class PatientsService {
     return this.prisma.patient.update({ where: { id }, data: dto });
   }
 
-  async getTimeline(id: string) {
+  async getTimeline(id: string, pagination?: PaginationDto) {
     await this.getPatient(id);
-    const records = await this.prisma.medicalRecord.findMany({
+    const page = pagination?.page || 1;
+    const limit = pagination?.limit || 20;
+    const where = { patientId: id };
+    const [records, total] = await Promise.all([this.prisma.medicalRecord.findMany({
       where: { patientId: id },
+      skip: (page - 1) * limit,
+      take: limit,
       include: { facility: { select: { name: true, type: true } } },
       orderBy: { recordDate: 'desc' },
-    });
-    return records.map((r) => ({
+    }), this.prisma.medicalRecord.count({ where })]);
+    const items = records.map((r) => ({
       id: r.id,
       date: r.recordDate,
       type: r.recordType,
@@ -46,5 +53,6 @@ export class PatientsService {
       clinician: r.clinician,
       sourceFormat: r.sourceFormat,
     }));
+    return paginated(items, total, page, limit);
   }
 }

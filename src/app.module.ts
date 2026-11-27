@@ -19,6 +19,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { MedicationsModule } from './medications/medications.module';
 import { SymptomsModule } from './symptoms/symptoms.module';
 import { AdminModule } from './admin/admin.module';
+import { FacilitiesModule } from './facilities/facilities.module';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 
 @Module({
@@ -42,6 +43,7 @@ import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
     MedicationsModule,
     SymptomsModule,
     AdminModule,
+    FacilitiesModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

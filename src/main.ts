@@ -48,6 +48,7 @@ async function bootstrap() {
     .addTag('Symptoms', 'Symptom logging and AI triage')
     .addTag('Reports', 'AI-generated health reports')
     .addTag('Notifications', 'User notification management')
+    .addTag('Facilities', 'Healthcare facility management')
     .build();
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api/docs', app, document);

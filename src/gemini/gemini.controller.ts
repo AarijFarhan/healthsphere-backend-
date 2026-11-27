@@ -1,7 +1,9 @@
 import {
   Controller, Get, Post, Param, Body, Query, UseGuards, Req,
 } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
+import { PaginationDto } from '../common/pagination/pagination.dto';
+import { paginated } from '../common/pagination/pagination';
+import { ApiTags, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { GeminiService } from './gemini.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { PrismaService } from '../prisma/prisma.service';
@@ -49,22 +51,37 @@ export class GeminiController {
   @Get('sessions')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  async getSessions(@Req() req: any) {
-    return this.prisma.aIChatSession.findMany({
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  async getSessions(@Req() req: any, @Query() pagination: PaginationDto) {
+    const page = pagination?.page || 1;
+    const limit = pagination?.limit || 20;
+    const where = { userId: req.user.sub };
+    const [items, total] = await Promise.all([this.prisma.aIChatSession.findMany({
       where: { userId: req.user.sub },
+      skip: (page - 1) * limit,
+      take: limit,
       orderBy: { updatedAt: 'desc' },
-      take: 20,
-    });
+    }), this.prisma.aIChatSession.count({ where })]);
+    return paginated(items, total, page, limit);
   }
 
   @Get('sessions/:id/messages')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  async getMessages(@Param('id') id: string) {
-    return this.prisma.aIChatMessage.findMany({
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  async getMessages(@Param('id') id: string, @Query() pagination: PaginationDto) {
+    const page = pagination?.page || 1;
+    const limit = pagination?.limit || 20;
+    const where = { sessionId: id };
+    const [items, total] = await Promise.all([this.prisma.aIChatMessage.findMany({
       where: { sessionId: id },
+      skip: (page - 1) * limit,
+      take: limit,
       orderBy: { createdAt: 'asc' },
-    });
+    }), this.prisma.aIChatMessage.count({ where })]);
+    return paginated(items, total, page, limit);
   }
 
   @Post('analyze-labs')

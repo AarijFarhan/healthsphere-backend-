@@ -2,6 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { HuggingFaceService } from '../huggingface/huggingface.service';
 import { GeminiService } from '../gemini/gemini.service';
+import { PaginationDto } from '../common/pagination/pagination.dto';
+import { paginated } from '../common/pagination/pagination';
 
 @Injectable()
 export class SymptomsService {
@@ -42,16 +44,21 @@ export class SymptomsService {
     });
   }
 
-  async getSymptomLogs(patientId: string) {
-    return this.prisma.symptomLog.findMany({
+  async getSymptomLogs(patientId: string, pagination?: PaginationDto) {
+    const page = pagination?.page || 1;
+    const limit = pagination?.limit || 20;
+    const where = { patientId };
+    const [items, total] = await Promise.all([this.prisma.symptomLog.findMany({
       where: { patientId },
+      skip: (page - 1) * limit,
+      take: limit,
       orderBy: { loggedAt: 'desc' },
-      take: 30,
-    });
+    }), this.prisma.symptomLog.count({ where })]);
+    return paginated(items, total, page, limit);
   }
 
   async analyzeSymtomPatterns(patientId: string) {
-    const logs = await this.getSymptomLogs(patientId);
+    const logs = (await this.getSymptomLogs(patientId)).data;
     const allSymptoms = logs.flatMap((l) => l.symptoms);
     const frequency = allSymptoms.reduce((acc, s) => {
       acc[s] = (acc[s] || 0) + 1;

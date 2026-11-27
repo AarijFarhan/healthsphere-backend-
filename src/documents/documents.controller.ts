@@ -8,11 +8,13 @@ import {
   UseInterceptors,
   UploadedFile,
   Req,
+  Query,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { ApiTags, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth, ApiConsumes, ApiQuery } from '@nestjs/swagger';
 import { DocumentsService } from './documents.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { PaginationDto } from '../common/pagination/pagination.dto';
 
 @ApiTags('Documents')
 @Controller()
@@ -48,8 +50,10 @@ export class DocumentsController {
   @Get('patients/:patientId/documents')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  getPatientDocuments(@Param('patientId') patientId: string) {
-    return this.documentsService.getPatientDocuments(patientId);
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  getPatientDocuments(@Param('patientId') patientId: string, @Query() pagination: PaginationDto) {
+    return this.documentsService.getPatientDocuments(patientId, pagination);
   }
 
   @Delete('documents/:id')

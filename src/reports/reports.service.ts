@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { GeminiService } from '../gemini/gemini.service';
+import { PaginationDto } from '../common/pagination/pagination.dto';
+import { paginated } from '../common/pagination/pagination';
 
 @Injectable()
 export class ReportsService {
@@ -69,11 +71,16 @@ export class ReportsService {
     return sections.join('\n');
   }
 
-  async getReports(patientId: string) {
-    return this.prisma.healthReport.findMany({
+  async getReports(patientId: string, pagination?: PaginationDto) {
+    const page = pagination?.page || 1;
+    const limit = pagination?.limit || 20;
+    const [items, total] = await Promise.all([this.prisma.healthReport.findMany({
       where: { patientId },
+      skip: (page - 1) * limit,
+      take: limit,
       orderBy: { generatedAt: 'desc' },
-    });
+    }), this.prisma.healthReport.count({ where: { patientId } })]);
+    return paginated(items, total, page, limit);
   }
 
   async getReport(id: string) {
