@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { Allow, IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
 export const DEFAULT_PAGE_SIZE = 20;
@@ -30,4 +30,28 @@ export class PaginationDto {
   @IsOptional()
   @IsString()
   sortBy?: string;
+
+  @Allow()
+  search?: string;
+
+  @Allow()
+  sort?: string;
+
+  @Allow()
+  filter?: string;
+
+  @Allow()
+  type?: string;
+
+  @Allow()
+  includeInactive?: any;
+
+  @Allow()
+  startDate?: string;
+
+  @Allow()
+  endDate?: string;
+
+  @Allow()
+  topic?: string;
 }

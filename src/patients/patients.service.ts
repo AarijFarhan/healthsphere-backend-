@@ -8,6 +8,25 @@ import { paginated } from '../common/pagination/pagination';
 export class PatientsService {
   constructor(private prisma: PrismaService) {}
 
+  async listPatients(pagination?: PaginationDto, search?: string) {
+    const page = pagination?.page || 1;
+    const limit = pagination?.limit || 20;
+    const where: any = search
+      ? { fullName: { contains: search, mode: 'insensitive' } }
+      : {};
+    const [items, total] = await Promise.all([
+      this.prisma.patient.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+        include: { _count: { select: { medicalRecords: true, appointments: true } } },
+      }),
+      this.prisma.patient.count({ where }),
+    ]);
+    return paginated(items, total, page, limit);
+  }
+
   async getPatient(id: string) {
     const patient = await this.prisma.patient.findUnique({
       where: { id },

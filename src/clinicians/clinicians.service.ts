@@ -7,6 +7,19 @@ import { paginated } from '../common/pagination/pagination';
 export class CliniciansService {
   constructor(private prisma: PrismaService) {}
 
+  async listClinicians() {
+    return this.prisma.clinician.findMany({
+      select: {
+        id: true,
+        userId: true,
+        fullName: true,
+        specialty: true,
+        facilityName: true,
+      },
+      orderBy: { fullName: 'asc' },
+    });
+  }
+
   async getPatients(clinicianId: string, search?: string, sort?: string, filter?: string, pagination?: PaginationDto) {
     const clinician = await this.prisma.clinician.findUnique({ where: { id: clinicianId } });
     if (!clinician) throw new NotFoundException('Clinician not found');

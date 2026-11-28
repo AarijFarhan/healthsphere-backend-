@@ -11,6 +11,11 @@ import { PaginationDto } from '../common/pagination/pagination.dto';
 export class CliniciansController {
   constructor(private cliniciansService: CliniciansService) {}
 
+  @Get('clinicians')
+  listClinicians() {
+    return this.cliniciansService.listClinicians();
+  }
+
   @Get('clinicians/:id/patients')
   @ApiQuery({ name: 'search', required: false })
   @ApiQuery({ name: 'sort', required: false })
